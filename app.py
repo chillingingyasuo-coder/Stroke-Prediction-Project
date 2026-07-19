@@ -1,76 +1,86 @@
 import streamlit as st
-import pickle
-import numpy as np
 import pandas as pd
+import pickle
+from xgboost import XGBClassifier
 
-# 1. تحميل النموذج والـ Scaler
-try:
-    model = pickle.load(open('stroke_model.sav', 'rb'))
-    scaler = pickle.load(open('scaler.sav', 'rb'))
-except Exception as e:
-    st.error(f"خطأ في تحميل ملفات الموديل: {e}")
+# تحميل الموديل والـ Scaler
+model = XGBClassifier()
+model.load_model('stroke_model.json')
+scaler = pickle.load(open('scaler.sav', 'rb'))
 
-# 2. واجهة التطبيق وحقول الإدخال
-st.title("🧠 نظام التنبؤ بالسكتة الدماغية (Cerebral Stroke Prediction)")
-st.write("الرجاء إدخال بيانات المريض للتنبؤ باحتمالية الإصابة:")
+st.title(" Stroke Prediction App")
+st.write("أدخل بيانات المريض للتنبؤ باحتمالية الإصابة بالسكتة الدماغية")
 
-age = st.number_input("العمر (Age)", min_value=0, max_value=120, value=82)
-avg_glucose_level = st.number_input("مستوى السكر في الدم (Avg Glucose Level)", min_value=0.0, value=240.0)
-bmi = st.number_input("مؤشر كتلة الجسم (BMI)", min_value=0.0, value=31.0)
+# مدخلات المستخدم
+age = st.slider("العمر (Age)", 1, 100, 45)
+avg_glucose_level = st.number_input("مستوى الجلوكوز", value=90.0)
+bmi = st.number_input("BMI", value=25.0)
 
-gender = st.selectbox("الجنس (Gender)", ["Male", "Female", "Other"])
-hypertension = st.selectbox("هل يعاني من ضغط الدم؟ (Hypertension)", [0, 1], index=1)
-heart_disease = st.selectbox("هل يعاني من مرض في القلب؟ (Heart Disease)", [0, 1], index=1)
-ever_married = st.selectbox("هل سبق له الزواج؟ (Ever Married)", ["Yes", "No"], index=0)
+gender = st.selectbox("الجنس", ["ذكر", "أنثى", "آخر"])
+hypertension = st.selectbox("هل يعاني من ضغط الدم؟", ["لا", "نعم"])
+heart_disease = st.selectbox("هل يعاني من أمراض القلب؟", ["لا", "نعم"])
+ever_married = st.selectbox("هل سبق له الزواج؟", ["نعم", "لا"])
+work_type = st.selectbox(
+    "نوع العمل",
+    ["Private", "Self-employed", "Govt_job", "children", "Never_worked"]
+)
+residence = st.selectbox("مكان الإقامة", ["Urban", "Rural"])
+smoking = st.selectbox(
+    "حالة التدخين",
+    ["Unknown", "never smoked", "formerly smoked", "smokes"]
+)
 
-work_type = st.selectbox("نوع العمل (Work Type)", ["Private", "Self-employed", "Govt_job", "children", "Never_worked"], index=1)
-Residence_type = st.selectbox("مكان الإقامة (Residence Type)", ["Urban", "Rural"], index=0)
-smoking_status = st.selectbox("حالة التدخين (Smoking Status)", ["formerly smoked", "never smoked", "smokes", "Unknown"], index=0)
+if st.button("Predict"):
 
-# 3. بناء قاموس الميزات
-raw_features = {
-    'id': 0, 'age': age, 'hypertension': hypertension, 'heart_disease': heart_disease,
-    'avg_glucose_level': avg_glucose_level, 'bmi': bmi,
-    'is_senior': 1 if age > 60 else 0,
-    'is_obese': 1 if bmi > 30 else 0,
-    'gender_Male': 1 if gender == "Male" else 0,
-    'gender_Other': 0,
-    'ever_married_Yes': 1 if ever_married == "Yes" else 0,
-    'work_type_Never_worked': 1 if work_type == "Never_worked" else 0,
-    'work_type_Private': 1 if work_type == "Private" else 0,
-    'work_type_Self-employed': 1 if work_type == "Self-employed" else 0,
-    'work_type_children': 1 if work_type == "children" else 0,
-    'Residence_type_Urban': 1 if Residence_type == "Urban" else 0,
-    'smoking_status_formerly smoked': 1 if smoking_status == "formerly smoked" else 0,
-    'smoking_status_never smoked': 1 if smoking_status == "never smoked" else 0,
-    'smoking_status_smokes': 1 if smoking_status == "smokes" else 0
-}
+    has_hypertension = 1 if hypertension == "نعم" else 0
+    is_smoker = 1 if smoking == "smokes" else 0
 
-input_data = pd.DataFrame([raw_features])
+    input_data = {
+        "age": age,
+        "hypertension": has_hypertension,
+        "heart_disease": 1 if heart_disease == "نعم" else 0,
+        "avg_glucose_level": avg_glucose_level,
+        "bmi": bmi,
+        "gender_Male": 1 if gender == "ذكر" else 0,
+        "gender_Other": 1 if gender == "آخر" else 0,
+        "ever_married_Yes": 1 if ever_married == "نعم" else 0,
+        "work_type_Never_worked": 1 if work_type == "Never_worked" else 0,
+        "work_type_Private": 1 if work_type == "Private" else 0,
+        "work_type_Self-employed": 1 if work_type == "Self-employed" else 0,
+        "work_type_children": 1 if work_type == "children" else 0,
+        "Residence_type_Urban": 1 if residence == "Urban" else 0,
+        "smoking_status_formerly smoked": 1 if smoking == "formerly smoked" else 0,
+        "smoking_status_never smoked": 1 if smoking == "never smoked" else 0,
+        "smoking_status_smokes": is_smoker,
+        "is_senior": 1 if age >= 60 else 0,
+        "smokes_and_has_hypertension": 1 if (is_smoker == 1 and has_hypertension == 1) else 0,
+        "is_obese": 1 if bmi >= 30 else 0,
+        "is_diabetic": 1 if avg_glucose_level >= 126 else 0,
+        "senior_hypertension": 1 if (age > 60 and has_hypertension == 1) else 0,
+    }
 
-# 4. معالجة البيانات والتنبؤ
-if st.button("تنبؤ باحتمالية الإصابة"):
-    if hasattr(scaler, 'feature_names_in_'):
-        expected_features = list(scaler.feature_names_in_)
-        final_input = pd.DataFrame(columns=expected_features)
-        for col in expected_features:
-            final_input[col] = input_data[col] if col in input_data.columns else 0
-        
-        input_scaled = scaler.transform(final_input)
-        
-        try:
-            probabilities = model.predict_proba(input_scaled)
-            stroke_prob = probabilities[0][1] 
-        except AttributeError:
-            stroke_prob = 0.0
-            st.warning("الموديل لا يدعم predict_proba")
-            
-        st.write("---")
-        st.info(f"📊 احتمالية الإصابة الحقيقية المستخرجة من الموديل: {stroke_prob * 100:.2f}%")
-        
-        if stroke_prob > 0.10: 
-            st.error("⚠️ تحذير: هذا المريض معرض لخطر الإصابة بسكتة دماغية (High Risk).")
-        else:
-            st.success("✅ المريض غير معرض لخطر الإصابة بسكتة دماغية حالياً (Low Risk).")
+    correct_order = [
+        'age', 'hypertension', 'heart_disease', 'avg_glucose_level', 'bmi',
+        'gender_Male', 'gender_Other', 'ever_married_Yes',
+        'work_type_Never_worked', 'work_type_Private', 'work_type_Self-employed', 'work_type_children',
+        'Residence_type_Urban',
+        'smoking_status_formerly smoked', 'smoking_status_never smoked', 'smoking_status_smokes',
+        'is_senior', 'smokes_and_has_hypertension', 'is_obese', 'is_diabetic', 'senior_hypertension'
+    ]
+
+    df_input = pd.DataFrame([input_data])[correct_order]
+
+
+    scaled_data = scaler.transform(df_input)
+    probability = model.predict_proba(scaled_data)[0][1]
+    relative_risk = probability / 0.018
+
+    st.write(f"احتمالية الإصابة بالسكتة الدماغية: **{probability:.2%}**")
+    st.write(f"خطره أعلى من المعدل الطبيعي بـ **{relative_risk:.0f} مرة**")
+
+    if probability >= 0.30:
+        st.error(" خطر مرتفع جداً")
+    elif probability >= 0.15:
+        st.warning(" المريض معرض لخطر الإصابة بالسكتة الدماغية.")
     else:
-        st.error("الـ Scaler المحفوظ لا يحتوي على أسماء الميزات.")
+        st.success(" خطر الإصابة منخفض.")
